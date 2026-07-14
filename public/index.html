@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>升级 LAN</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main id="app">
+      <section class="join" id="joinPanel">
+        <header class="lobby-hero">
+          <div class="title-mark">
+            <span class="title-card card-a">A</span>
+            <div>
+              <h1>升级</h1>
+              <p>局域网 4 人对战，支持机器人补位</p>
+            </div>
+            <span class="title-card card-k">K</span>
+          </div>
+        </header>
+
+        <div class="name-strip">
+          <label for="name">你的昵称</label>
+          <input id="name" maxlength="16" autocomplete="nickname" placeholder="玩家" />
+        </div>
+
+        <div class="lobby-grid">
+          <section class="lobby-card start-card">
+            <div class="section-head">
+              <span class="section-kicker">单机 / 快速开始</span>
+              <strong>立即开局</strong>
+            </div>
+            <p class="section-copy">创建一个 4 人房间并自动补满机器人，适合先熟悉规则和调试流程。</p>
+            <button id="soloBtn" class="primary-btn">快速开始 4 人</button>
+            <button id="createBtn" class="secondary-btn">只创建房间</button>
+          </section>
+
+          <section class="lobby-card friend-card">
+            <div class="section-head">
+              <span class="section-kicker">和朋友玩</span>
+              <strong>加入现有房间</strong>
+            </div>
+            <div class="join-row">
+              <input id="roomCode" maxlength="6" placeholder="输入房间码" />
+              <button id="joinBtn" class="secondary-btn">加入</button>
+            </div>
+            <p class="section-copy subtle">同一局域网访问本机 IP:3000，输入房间码即可入桌。</p>
+          </section>
+        </div>
+      </section>
+
+      <section class="table hidden" id="tablePanel">
+        <header class="topbar">
+          <div class="room-identity">
+            <div class="room-pill">房间 <span id="code">----</span></div>
+            <div class="phase-pill" id="phase"></div>
+          </div>
+          <div class="meta" id="meta"></div>
+          <div class="toolbar">
+            <button id="botBtn" class="secondary-btn">添加机器人</button>
+            <button id="startBtn" class="primary-btn">开始/下一局</button>
+          </div>
+        </header>
+
+        <section class="table-stage">
+          <aside class="seat seat-left" id="seat1"></aside>
+          <aside class="seat seat-top" id="seat2"></aside>
+
+          <section class="board">
+            <div class="score-strip" id="score"></div>
+            <div class="trick" id="trick"></div>
+          </section>
+
+          <aside class="seat seat-right" id="seat3"></aside>
+          <aside class="seat seat-bottom" id="seat0"></aside>
+        </section>
+
+        <section class="controls">
+          <div class="status" id="status"></div>
+          <div class="hand-actions">
+            <button id="clearBtn" class="ghost-btn">清除</button>
+            <button id="passBtn" class="ghost-btn">过</button>
+            <button id="changeBtn" class="secondary-btn">改主/攻主</button>
+            <button id="buryBtn" class="secondary-btn">扣底</button>
+            <button id="playBtn" class="primary-btn">出牌</button>
+          </div>
+        </section>
+
+        <section class="hand" id="hand"></section>
+        <section class="log" id="log"></section>
+      </section>
+    </main>
+
+    <div class="toast hidden" id="toast"></div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

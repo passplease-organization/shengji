@@ -1,0 +1,20 @@
+{
+  "name": "shengji-lan",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LAN Shengji / Tractor card game with Socket.IO multiplayer and bots.",
+  "scripts": {
+    "build": "esbuild vendor/playing-card-entry.js --bundle --format=esm --platform=browser --loader:.png=dataurl --outfile=public/vendor/playing-card.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@jeremywalton/playing-card": "^0.0.11",
+    "esbuild": "^0.25.6",
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
