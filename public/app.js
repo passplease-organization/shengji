@@ -259,9 +259,10 @@ function trickCardHtml(card) {
 function playingCardHtml(card, { className, attrs = "" }) {
   const [suit, rank] = splitLabel(card);
   const colorClass = card.red ? " red" : "";
+  const jokerClass = card.suit === "JOKER" ? " joker" : "";
   const face = card.suit === "JOKER" ? rank : suit;
   return `
-    <button class="${className}${colorClass}" ${attrs} title="${escapeHtml(card.label)}" type="button">
+    <button class="${className}${colorClass}${jokerClass}" ${attrs} title="${escapeHtml(card.label)}" type="button">
       <span class="card-corner top">
         <span>${escapeHtml(rank)}</span>
         <span>${escapeHtml(suit)}</span>
@@ -306,8 +307,8 @@ function animateTrickArrival(prev, next) {
       const ghost = document.createElement("div");
       ghost.className = "trick-ghost";
       ghost.innerHTML = playingCardHtml(card, { className: "table-card trick-card" });
-      const startX = originRect.left - stageRect.left + originRect.width / 2 - 30;
-      const startY = originRect.top - stageRect.top + originRect.height / 2 - 42;
+      const startX = originRect.left - stageRect.left + originRect.width / 2 - 48;
+      const startY = originRect.top - stageRect.top + originRect.height / 2 - 67;
       const endX = targetRect.left - stageRect.left;
       const endY = targetRect.top - stageRect.top;
       ghost.style.left = `${startX}px`;

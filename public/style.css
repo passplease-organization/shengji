@@ -272,7 +272,7 @@ input:focus {
 .table {
   min-height: 100vh;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto 148px;
+  grid-template-rows: auto minmax(0, 1fr) auto 246px 74px;
 }
 
 .topbar {
@@ -364,33 +364,33 @@ input:focus {
 
 .trick-play {
   position: absolute;
-  width: 230px;
-  min-height: 86px;
+  width: 300px;
+  min-height: 142px;
   padding: 0;
   background: transparent;
   border: 0;
 }
 
 .trick-play-top {
-  top: 54px;
+  top: 76px;
   left: 50%;
   transform: translateX(-50%);
 }
 
 .trick-play-left {
-  left: 18px;
+  left: calc(50% - 360px);
   top: 50%;
   transform: translateY(-50%);
 }
 
 .trick-play-right {
-  right: 18px;
+  right: calc(50% - 360px);
   top: 50%;
   transform: translateY(-50%);
 }
 
 .trick-play-bottom {
-  bottom: 30px;
+  bottom: 112px;
   left: 50%;
   transform: translateX(-50%);
 }
@@ -417,12 +417,12 @@ input:focus {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  min-height: 74px;
+  min-height: 136px;
   position: relative;
 }
 
 .trick-cards.filled > * {
-  margin-left: -20px;
+  margin-left: -44px;
 }
 
 .trick-cards.filled > *:first-child {
@@ -437,17 +437,17 @@ input:focus {
 
 .trick-ghost {
   position: absolute;
-  width: 48px;
-  height: 68px;
+  width: 96px;
+  height: 134px;
   border-radius: 6px;
   pointer-events: none;
   z-index: 20;
 }
 
 .trick-ghost .table-card {
-  width: 48px;
-  height: 68px;
-  flex-basis: 48px;
+  width: 96px;
+  height: 134px;
+  flex-basis: 96px;
 }
 
 .seat {
@@ -534,14 +534,17 @@ input:focus {
   display: flex;
   gap: 0;
   overflow-x: auto;
-  padding: 12px 22px 16px 34px;
-  background: linear-gradient(180deg, rgba(250, 247, 239, 0.96), rgba(235, 229, 216, 0.98));
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: inset 0 10px 24px rgba(0, 0, 0, 0.05);
+  align-items: end;
+  padding: 34px 28px 20px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(50, 143, 84, 0.22), rgba(4, 20, 11, 0) 56%),
+    rgba(3, 12, 7, 0.38);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 18px 32px rgba(0, 0, 0, 0.18);
 }
 
 .hand > * {
-  margin-left: -22px;
+  margin-left: -48px;
   position: relative;
 }
 
@@ -551,18 +554,18 @@ input:focus {
 
 .hand > *:hover,
 .hand > *:focus-within {
-  z-index: 50 !important;
+  filter: brightness(1.03);
 }
 
 .table-card {
   position: relative;
-  width: 60px;
-  height: 84px;
-  flex: 0 0 60px;
+  width: 120px;
+  height: 168px;
+  flex: 0 0 120px;
   display: block;
   padding: 0;
-  border: 1px solid rgba(20, 28, 22, 0.16);
-  border-radius: 6px;
+  border: 1px solid rgba(20, 28, 22, 0.18);
+  border-radius: 9px;
   background: linear-gradient(180deg, #fffefa 0%, #f5f0e6 100%);
   color: #111815;
   box-shadow:
@@ -576,8 +579,8 @@ input:focus {
 .table-card::after {
   content: "";
   position: absolute;
-  inset: 3px;
-  border-radius: 4px;
+  inset: 5px;
+  border-radius: 6px;
   border: 1px solid rgba(0, 0, 0, 0.035);
   pointer-events: none;
 }
@@ -587,33 +590,35 @@ input:focus {
 }
 
 .table-card.selected {
-  transform: translateY(-14px);
+  transform: translateY(-34px);
   border-color: rgba(240, 191, 69, 0.82);
-  box-shadow: 0 12px 20px rgba(0, 0, 0, 0.22);
-  z-index: 40 !important;
+  box-shadow:
+    0 0 0 3px rgba(240, 191, 69, 0.22),
+    0 22px 28px rgba(0, 0, 0, 0.28);
 }
 
 .card-corner {
   position: absolute;
-  left: 5px;
+  left: 9px;
+  min-width: 24px;
   display: grid;
   justify-items: center;
   gap: 0;
   font-weight: 800;
-  line-height: 0.9;
-  font-size: 11px;
+  line-height: 0.95;
+  font-size: 20px;
   z-index: 2;
 }
 
 .card-corner.top {
-  top: 5px;
+  top: 9px;
 }
 
 .card-corner.bottom {
-  right: 5px;
-  bottom: 5px;
+  right: 9px;
+  bottom: 9px;
   left: auto;
-  transform: rotate(180deg);
+  transform: none;
 }
 
 .card-face {
@@ -621,43 +626,55 @@ input:focus {
   inset: 0;
   display: grid;
   place-items: center;
-  font-size: 30px;
+  font-size: 56px;
   font-weight: 800;
   opacity: 0.92;
 }
 
+.table-card.joker .card-face {
+  font-size: 34px;
+  line-height: 1;
+  writing-mode: vertical-rl;
+}
+
 .hand-card:hover {
-  transform: translateY(-10px);
+  transform: translateY(-22px);
 }
 
 .hand-card.selected:hover {
-  transform: translateY(-14px);
+  transform: translateY(-34px);
 }
 
 .trick-card {
-  width: 48px;
-  height: 68px;
-  flex-basis: 48px;
+  width: 96px;
+  height: 134px;
+  flex-basis: 96px;
   cursor: default;
-  border-radius: 5px;
+  border-radius: 8px;
 }
 
 .trick-card .card-corner {
-  left: 4px;
-  font-size: 9px;
+  left: 7px;
+  min-width: 19px;
+  font-size: 16px;
 }
 
 .trick-card .card-corner.top {
-  top: 4px;
+  top: 7px;
 }
 
 .trick-card .card-corner.bottom {
-  right: 4px;
-  bottom: 4px;
+  right: 7px;
+  bottom: 7px;
+  left: auto;
 }
 
 .trick-card .card-face {
-  font-size: 24px;
+  font-size: 44px;
+}
+
+.trick-card.joker .card-face {
+  font-size: 26px;
 }
 
 .mini-card {
@@ -679,19 +696,19 @@ input:focus {
 .log {
   overflow: auto;
   padding: 10px 22px 16px;
-  background: rgba(250, 247, 239, 0.96);
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-  color: #233128;
+  background: rgba(3, 12, 7, 0.62);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(224, 235, 227, 0.74);
   font-size: 13px;
 }
 
 .log-line {
   margin-bottom: 6px;
-  color: #65716a;
+  color: rgba(224, 235, 227, 0.62);
 }
 
 .log-line strong {
-  color: #1e2f24;
+  color: rgba(246, 242, 231, 0.92);
 }
 
 .toast {
@@ -712,7 +729,7 @@ input:focus {
   }
 
   .table {
-    grid-template-rows: auto auto auto auto 180px;
+    grid-template-rows: auto auto auto 190px 74px;
   }
 
   .topbar,
@@ -758,24 +775,24 @@ input:focus {
   }
 
   .trick-play {
-    width: 168px;
-    min-height: 96px;
+    width: 220px;
+    min-height: 110px;
   }
 
   .trick-play-top {
-    top: 6px;
+    top: 20px;
   }
 
   .trick-play-left {
-    left: 0;
+    left: 8px;
   }
 
   .trick-play-right {
-    right: 0;
+    right: 8px;
   }
 
   .trick-play-bottom {
-    bottom: 6px;
+    bottom: 64px;
   }
 
   .seat {
@@ -808,27 +825,32 @@ input:focus {
   }
 
   .table-card {
-    width: 50px;
-    height: 72px;
-    flex-basis: 50px;
+    width: 86px;
+    height: 120px;
+    flex-basis: 86px;
   }
 
   .card-face {
-    font-size: 26px;
+    font-size: 40px;
   }
 
   .card-corner {
-    font-size: 10px;
+    min-width: 18px;
+    font-size: 15px;
   }
 
   .trick-card,
   .trick-ghost {
-    width: 42px;
-    height: 60px;
-    flex-basis: 42px;
+    width: 68px;
+    height: 96px;
+    flex-basis: 68px;
   }
 
   .trick-card .card-face {
-    font-size: 21px;
+    font-size: 32px;
+  }
+
+  .hand > * {
+    margin-left: -34px;
   }
 }
