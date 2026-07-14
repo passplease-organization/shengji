@@ -11,6 +11,7 @@ let toastTimer = null;
 
 const phaseName = {
   lobby: "等待开局",
+  deal: "发牌中",
   bury: "扣底",
   change: "改主",
   changeBury: "重扣底",
@@ -98,7 +99,8 @@ function render() {
   $("code").textContent = state.code;
   $("phase").textContent = phaseName[state.phase] || state.phase;
   $("meta").textContent = `主：${trumpName(state.trump.suit)} ${state.trump.level} ｜ 坐庄队：${state.dealerTeam + 1} ｜ 抓分：${state.scores.attackers}`;
-  $("score").textContent = `级数 队1 ${state.levels[0]} / 队2 ${state.levels[1]}，底牌 ${state.buriedCount} 张`;
+  const dealText = state.deal?.active ? `，发牌 ${state.deal.dealt}/${state.deal.total}` : "";
+  $("score").textContent = `级数 队1 ${state.levels[0]} / 队2 ${state.levels[1]}，底牌 ${state.buriedCount} 张${dealText}`;
 
   renderSeats();
   renderTrick();
@@ -179,16 +181,27 @@ function renderControls() {
   const myTurn = state.meSeat === state.turn;
   $("botBtn").disabled = state.phase !== "lobby";
   $("startBtn").disabled = state.phase !== "lobby";
+  $("changeBtn").textContent = state.phase === "deal" ? "叫主" : "改主/攻主";
   $("passBtn").disabled = !(state.phase === "change" && state.meSeat === state.turn);
-  $("changeBtn").disabled = !(state.phase === "change" && state.meSeat === state.turn && selected.size > 0);
+  $("changeBtn").disabled = !(
+    (state.phase === "deal" && selected.size > 0) ||
+    (state.phase === "change" && state.meSeat === state.turn && selected.size > 0)
+  );
   $("buryBtn").disabled = !((state.phase === "bury" || state.phase === "changeBury") && state.meSeat === state.dealerSeat && selected.size === 8);
-  $("playBtn").disabled = !(state.phase === "play" && myTurn && selected.size > 0);
-  if (state.phase === "bury" || state.phase === "changeBury") {
+  $("playBtn").disabled = !(state.phase === "play" && myTurn && selected.size > 0 && !state.trick?.reviewing);
+  if (state.phase === "deal") {
+    const dealt = state.deal ? `${state.deal.dealt}/${state.deal.total}` : "";
+    $("status").textContent = `正在发牌 ${dealt}，拿到本方级牌时可选择后叫主`;
+  } else if (state.phase === "bury" || state.phase === "changeBury") {
     $("status").textContent = state.meSeat === state.dealerSeat ? `请选择 8 张扣底，已选 ${selected.size}` : `等待 ${playerName(state.dealerSeat)} 扣底`;
   } else if (state.phase === "change") {
     $("status").textContent = state.meSeat === state.turn ? `可选择级牌或王对改主/攻主，或直接过` : `等待 ${playerName(state.turn)} 改主/攻主`;
   } else if (state.phase === "play") {
-    $("status").textContent = myTurn ? `轮到你出牌，已选 ${selected.size}` : `等待 ${playerName(state.turn)} 出牌`;
+    $("status").textContent = state.trick?.reviewing
+      ? `本轮结束，${playerName(state.trick.bestSeat)} 赢得本轮`
+      : myTurn
+        ? `轮到你出牌，已选 ${selected.size}`
+        : `等待 ${playerName(state.turn)} 出牌`;
   } else {
     $("status").textContent = "坐满 4 人或用机器人补位后开始";
   }

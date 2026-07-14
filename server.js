@@ -9,6 +9,8 @@ const RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
 const POINTS = { "5": 5, "10": 10, K: 10 };
 const TRUMP_NAMES = { S: "黑桃", H: "红桃", C: "梅花", D: "方块", NT: "无主" };
 const ROOM_TTL_MS = 1000 * 60 * 60 * 8;
+const DEAL_INTERVAL_MS = 115;
+const TRICK_REVIEW_MS = 1600;
 
 const app = express();
 const server = http.createServer(app);
@@ -219,6 +221,11 @@ class Room {
     this.tricks = [];
     this.scores = { attackers: 0 };
     this.lastActionAt = Date.now();
+    this.deck = [];
+    this.dealIndex = 0;
+    this.dealTimer = null;
+    this.trickTimer = null;
+    this.trickReviewing = false;
   }
 
   log(text) {
@@ -248,6 +255,12 @@ class Room {
       turn: this.turn,
       trump: this.trump,
       bidPower: this.bidPower,
+      deal: {
+        active: this.phase === "deal",
+        dealt: Math.min(this.dealIndex, 100),
+        total: 100,
+        kitty: 8
+      },
       kittyCount: this.kitty.length,
       buriedCount: this.buried.length,
       scores: this.scores,
@@ -256,7 +269,8 @@ class Room {
         leadSuit: this.trick.leadSuit,
         required: this.trick.required,
         plays: this.trick.plays.map((p) => ({ seat: p.seat, cards: p.cards.map(publicCard) })),
-        bestSeat: this.trick.bestSeat
+        bestSeat: this.trick.bestSeat,
+        reviewing: this.trickReviewing
       },
       hand: meSeat >= 0 ? sortHand(this.players[meSeat].hand, this.trump).map(publicCard) : [],
       logs: this.logs
@@ -286,22 +300,79 @@ class Room {
 
   start() {
     if (!this.canStart()) throw new Error("需要坐满 4 人/机器人");
-    const deck = shuffle(makeDeck());
+    this.clearTimers();
+    this.deck = shuffle(makeDeck());
+    this.dealIndex = 0;
     this.players.forEach((p) => (p.hand = []));
-    for (let i = 0; i < 100; i++) this.players[i % 4].hand.push(deck[i]);
-    this.kitty = deck.slice(100);
+    this.kitty = [];
     this.buried = [];
     this.tricks = [];
     this.scores = { attackers: 0 };
-    this.trump = this.autoDeclare();
-    this.bidPower = this.trump.power || 0;
+    this.trick = null;
+    this.trickReviewing = false;
     this.dealerTeam = teamOf(this.dealerSeat);
+    this.trump = { suit: "NT", level: RANKS[this.levels[this.dealerTeam]], power: 0 };
+    this.bidPower = 0;
+    this.phase = "deal";
+    this.turn = this.dealerSeat;
+    this.log("开始发牌，可在发牌过程中用级牌叫主");
+    this.scheduleDeal();
+  }
+
+  clearTimers() {
+    if (this.dealTimer) clearTimeout(this.dealTimer);
+    if (this.trickTimer) clearTimeout(this.trickTimer);
+    this.dealTimer = null;
+    this.trickTimer = null;
+  }
+
+  scheduleDeal() {
+    if (this.phase !== "deal") return;
+    this.dealTimer = setTimeout(() => this.dealOne(), DEAL_INTERVAL_MS);
+  }
+
+  dealOne() {
+    if (this.phase !== "deal") return;
+    if (this.dealIndex < 100) {
+      const seat = this.dealIndex % 4;
+      this.players[seat].hand.push(this.deck[this.dealIndex]);
+      this.dealIndex += 1;
+      if (this.dealIndex % 8 === 0 || this.dealIndex === 100) emitRoom(this.code);
+      this.maybeBotDeclareDuringDeal(seat);
+      this.scheduleDeal();
+      return;
+    }
+    this.finishDeal();
+  }
+
+  finishDeal() {
+    if (this.phase !== "deal") return;
+    this.kitty = this.deck.slice(100);
+    if (!this.bidPower) {
+      this.trump = this.autoDeclare();
+      this.bidPower = this.trump.power || 0;
+    }
     this.players[this.dealerSeat].hand.push(...this.kitty);
     this.kitty = [];
     this.phase = "bury";
     this.turn = this.dealerSeat;
-    this.log(`${this.players[this.dealerSeat].name} 定主：${TRUMP_NAMES[this.trump.suit]} ${this.trump.level}，扣底 8 张`);
+    this.log(`${this.players[this.dealerSeat].name} 定主：${TRUMP_NAMES[this.trump.suit]} ${this.trump.level}，收底扣 8 张`);
+    emitRoom(this.code);
     this.botLoop();
+  }
+
+  maybeBotDeclareDuringDeal(seat) {
+    const player = this.players[seat];
+    if (!player.bot || this.bidPower >= 2) return;
+    const level = RANKS[this.levels[teamOf(seat)]];
+    const candidate = player.hand.find((c) => c.rank === level && SUITS.includes(c.suit));
+    if (!candidate) return;
+    if (this.dealIndex < 24 && Math.random() < 0.78) return;
+    try {
+      this.declareTrump(seat, [candidate.uid]);
+    } catch {
+      // Ignore conservative bot bids that become invalid as state changes.
+    }
   }
 
   autoDeclare() {
@@ -360,6 +431,7 @@ class Room {
   }
 
   changeTrump(seat, ids) {
+    if (this.phase === "deal") return this.declareTrump(seat, ids);
     if (this.phase !== "change" || seat !== this.turn) throw new Error("还没轮到你改主");
     const cards = ids.map((cid) => this.players[seat].hand.find((c) => c.uid === cid));
     if (cards.length === 0 || cards.some(Boolean) === false || cards.some((c) => !c)) throw new Error("请选择手牌中的改主牌");
@@ -379,6 +451,22 @@ class Room {
     this.botLoop();
   }
 
+  declareTrump(seat, ids) {
+    if (this.phase !== "deal") throw new Error("现在不能叫主");
+    const cards = ids.map((cid) => this.players[seat].hand.find((c) => c.uid === cid));
+    if (cards.length === 0 || cards.some((c) => !c)) throw new Error("请选择手牌中的叫主牌");
+    const offer = this.evaluateTrumpOffer(cards, seat);
+    if (!offer) throw new Error("发牌时只能用本方级牌或王对叫主");
+    if (offer.power <= this.bidPower) throw new Error("叫主强度必须高于当前主");
+    this.trump = { suit: offer.suit, level: offer.level, power: offer.power };
+    this.bidPower = offer.power;
+    this.dealerSeat = seat;
+    this.dealerTeam = teamOf(seat);
+    this.turn = seat;
+    this.log(`${this.players[seat].name} 叫主：${TRUMP_NAMES[offer.suit]} ${offer.level}`);
+    emitRoom(this.code);
+  }
+
   evaluateTrumpOffer(cards, seat) {
     const level = RANKS[this.levels[teamOf(seat)]];
     const jokerRanks = cards.map((c) => c.rank).sort().join(",");
@@ -395,6 +483,7 @@ class Room {
 
   play(seat, ids) {
     if (this.phase !== "play" || seat !== this.turn) throw new Error("还没轮到你");
+    if (this.trickReviewing) throw new Error("本轮结算中，请稍等");
     const hand = this.players[seat].hand;
     const cards = takeCards(hand, ids);
     if (!cards) throw new Error("手牌不存在");
@@ -424,7 +513,7 @@ class Room {
       this.trick.bestSeat = seat;
     }
     this.log(`${this.players[seat].name} 出 ${cards.map(cardLabel).join(" ")}`);
-    if (this.trick.plays.length === 4) this.finishTrick();
+    if (this.trick.plays.length === 4) this.scheduleFinishTrick();
     else this.turn = nextSeat(seat);
     this.botLoop();
   }
@@ -436,14 +525,29 @@ class Room {
 
   finishTrick() {
     const trick = this.trick;
+    if (!trick) return;
     const winner = trick.bestSeat;
     const points = trick.plays.flatMap((p) => p.cards).reduce((sum, c) => sum + c.point, 0);
     if (teamOf(winner) !== this.dealerTeam) this.scores.attackers += points;
     this.tricks.push(trick);
     this.log(`${this.players[winner].name} 赢得本轮，${points} 分`);
     this.trick = null;
+    this.trickReviewing = false;
     this.turn = winner;
     if (this.players.every((p) => p.hand.length === 0)) this.finishRound(winner);
+    emitRoom(this.code);
+    this.botLoop();
+  }
+
+  scheduleFinishTrick() {
+    this.trickReviewing = true;
+    const winner = this.trick.bestSeat;
+    this.turn = winner;
+    if (this.trickTimer) clearTimeout(this.trickTimer);
+    this.trickTimer = setTimeout(() => {
+      this.trickTimer = null;
+      this.finishTrick();
+    }, TRICK_REVIEW_MS);
   }
 
   finishRound(lastWinner) {
@@ -493,7 +597,7 @@ class Room {
           this.log(e.message);
         }
       }
-      if (this.phase === "play" && this.players[this.turn]?.bot) {
+      if (this.phase === "play" && !this.trickReviewing && this.players[this.turn]?.bot) {
         try {
           this.play(this.turn, chooseBotPlay(this, this.turn));
         } catch (e) {
