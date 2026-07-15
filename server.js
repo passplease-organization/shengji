@@ -226,6 +226,7 @@ class Room {
     this.dealTimer = null;
     this.trickTimer = null;
     this.trickReviewing = false;
+    this.currentBid = null;
   }
 
   log(text) {
@@ -255,6 +256,13 @@ class Room {
       turn: this.turn,
       trump: this.trump,
       bidPower: this.bidPower,
+      currentBid: this.currentBid && {
+        seat: this.currentBid.seat,
+        suit: this.currentBid.suit,
+        level: this.currentBid.level,
+        power: this.currentBid.power,
+        cards: this.currentBid.cards.map(publicCard)
+      },
       deal: {
         active: this.phase === "deal",
         dealt: Math.min(this.dealIndex, 100),
@@ -310,6 +318,7 @@ class Room {
     this.scores = { attackers: 0 };
     this.trick = null;
     this.trickReviewing = false;
+    this.currentBid = null;
     this.dealerTeam = teamOf(this.dealerSeat);
     this.trump = { suit: "NT", level: RANKS[this.levels[this.dealerTeam]], power: 0 };
     this.bidPower = 0;
@@ -351,6 +360,9 @@ class Room {
     if (!this.bidPower) {
       this.trump = this.autoDeclare();
       this.bidPower = this.trump.power || 0;
+      this.currentBid = this.trump.cards?.length
+        ? { seat: this.trump.seat, suit: this.trump.suit, level: this.trump.level, power: this.trump.power, cards: this.trump.cards }
+        : null;
     }
     this.players[this.dealerSeat].hand.push(...this.kitty);
     this.kitty = [];
@@ -382,10 +394,12 @@ class Room {
       const hand = this.players[seat].hand;
       const level = RANKS[this.levels[teamOf(seat)]];
       for (const suit of SUITS) {
-        const levelCount = hand.filter((c) => c.rank === level && c.suit === suit).length;
+        const levelCards = hand.filter((c) => c.rank === level && c.suit === suit);
+        const levelCount = levelCards.length;
         if (levelCount) {
-          const power = levelCount + (hand.some((c) => c.rank === (RED_SUITS.has(suit) ? "RJ" : "BJ")) ? 2 : 0);
-          if (!best || power > best.power) best = { seat, suit, level, power };
+          const joker = hand.find((c) => c.rank === (RED_SUITS.has(suit) ? "RJ" : "BJ"));
+          const power = levelCount + (joker ? 2 : 0);
+          if (!best || power > best.power) best = { seat, suit, level, power, cards: joker ? [...levelCards, joker] : levelCards };
         }
       }
     }
@@ -444,6 +458,7 @@ class Room {
     this.bidPower = offer.power;
     this.dealerSeat = seat;
     this.dealerTeam = teamOf(seat);
+    this.currentBid = { seat, suit: offer.suit, level: offer.level, power: offer.power, cards };
     this.phase = "changeBury";
     this.turn = seat;
     this.changePasses = 0;
@@ -463,6 +478,7 @@ class Room {
     this.dealerSeat = seat;
     this.dealerTeam = teamOf(seat);
     this.turn = seat;
+    this.currentBid = { seat, suit: offer.suit, level: offer.level, power: offer.power, cards };
     this.log(`${this.players[seat].name} 叫主：${TRUMP_NAMES[offer.suit]} ${offer.level}`);
     emitRoom(this.code);
   }

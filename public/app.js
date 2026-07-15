@@ -105,6 +105,7 @@ function render() {
   renderSeats();
   renderTrick();
   renderHand();
+  renderBidShortcuts();
   renderControls();
   renderLog();
 }
@@ -130,13 +131,15 @@ function seatClass(seat) {
 
 function renderTrick() {
   const el = $("trick");
+  const notice = tableNoticeHtml();
   if (!state.trick) {
-    el.innerHTML = "";
+    el.innerHTML = notice;
     return;
   }
   const playBySeat = new Map(state.trick.plays.map((play) => [play.seat, play]));
   const seats = [2, 1, 3, 0];
   el.innerHTML = `
+    ${notice}
     <div class="trick-orbit">
       ${seats
         .map((seat) => {
@@ -157,6 +160,42 @@ function renderTrick() {
   `;
 }
 
+function tableNoticeHtml() {
+  const parts = [];
+  if (state.currentBid) {
+    parts.push(`
+      <div class="table-notice bid-notice">
+        <span class="notice-main">${escapeHtml(playerName(state.currentBid.seat))} 叫主 ${escapeHtml(trumpName(state.currentBid.suit))} ${escapeHtml(state.currentBid.level)}</span>
+        <span class="notice-cards">${state.currentBid.cards.map(miniCard).join("")}</span>
+      </div>
+    `);
+  }
+  const action = actionNotice();
+  if (action) parts.push(`<div class="table-notice action-notice${action.urgent ? " urgent" : ""}">${escapeHtml(action.text)}</div>`);
+  return parts.length ? `<div class="table-notices">${parts.join("")}</div>` : "";
+}
+
+function actionNotice() {
+  if (state.phase === "deal") return { text: "发牌中：拿到级牌可以叫主", urgent: false };
+  if (state.phase === "bury" || state.phase === "changeBury") {
+    return state.meSeat === state.dealerSeat
+      ? { text: "轮到你扣底", urgent: true }
+      : { text: `等待 ${playerName(state.dealerSeat)} 扣底`, urgent: false };
+  }
+  if (state.phase === "change") {
+    return state.meSeat === state.turn
+      ? { text: "轮到你改主/攻主", urgent: true }
+      : { text: `等待 ${playerName(state.turn)} 改主/攻主`, urgent: false };
+  }
+  if (state.phase === "play") {
+    if (state.trick?.reviewing) return { text: `本轮结束，${playerName(state.trick.bestSeat)} 赢得本轮`, urgent: false };
+    return state.meSeat === state.turn
+      ? { text: "轮到你出牌", urgent: true }
+      : { text: `等待 ${playerName(state.turn)} 出牌`, urgent: false };
+  }
+  return null;
+}
+
 function renderHand() {
   const hand = $("hand");
   const valid = new Set(state.hand.map((c) => c.uid));
@@ -173,6 +212,42 @@ function renderHand() {
       if (selected.has(uid)) selected.delete(uid);
       else selected.add(uid);
       render();
+    });
+  });
+}
+
+function renderBidShortcuts() {
+  const el = $("bidShortcuts");
+  const offers = possibleTrumpOffers();
+  if (!offers.length) {
+    el.classList.add("hidden");
+    el.innerHTML = "";
+    return;
+  }
+  el.classList.remove("hidden");
+  el.innerHTML = `
+    <span class="shortcut-label">${state.phase === "deal" ? "可叫主" : "可改主"}</span>
+    ${offers
+      .map(
+        (offer, index) => `
+          <button class="bid-chip${offer.red ? " red" : ""}" data-offer="${index}" type="button">
+            <span>${escapeHtml(offer.name)}</span>
+            <small>${offer.cards.map((c) => c.label).join(" ")}</small>
+          </button>
+        `
+      )
+      .join("")}
+  `;
+  el.querySelectorAll("[data-offer]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const offer = offers[Number(button.dataset.offer)];
+      if (!offer) return;
+      selected.clear();
+      offer.cards.forEach((card) => selected.add(card.uid));
+      playOrigins = capturePlayOrigins(offer.cards.map((card) => card.uid));
+      render();
+      const res = await api("changeTrump", { ids: offer.cards.map((card) => card.uid) });
+      if (res?.ok) selected.clear();
     });
   });
 }
@@ -258,6 +333,53 @@ function cardOrder(card, trump) {
   return idx >= 0 ? idx : -1;
 }
 
+function possibleTrumpOffers() {
+  if (!state || (state.phase !== "deal" && state.phase !== "change")) return [];
+  if (state.phase === "change" && state.meSeat !== state.turn) return [];
+  const me = state.players[state.meSeat];
+  if (!me) return [];
+  const level = state.levels[me.team];
+  const bySuit = new Map();
+  for (const suit of ["S", "H", "C", "D"]) {
+    bySuit.set(
+      suit,
+      state.hand.filter((card) => card.rank === level && card.suit === suit)
+    );
+  }
+  const redJokers = state.hand.filter((card) => card.rank === "RJ");
+  const blackJokers = state.hand.filter((card) => card.rank === "BJ");
+  const offers = [];
+  for (const suit of ["S", "H", "C", "D"]) {
+    const levels = bySuit.get(suit);
+    if (!levels.length) continue;
+    const matchingJokers = (suit === "H" || suit === "D") ? redJokers : blackJokers;
+    const baseCards = levels.slice(0, Math.min(2, levels.length));
+    addOffer(offers, suit, level, baseCards);
+    if (matchingJokers.length) addOffer(offers, suit, level, [...baseCards, matchingJokers[0]]);
+  }
+  if (redJokers.length && blackJokers.length) {
+    addOffer(offers, "NT", level, [blackJokers[0], redJokers[0]]);
+  }
+  return offers
+    .filter((offer) => offer.power > (state.bidPower || 0))
+    .sort((a, b) => b.power - a.power || a.sort - b.sort)
+    .slice(0, 6);
+}
+
+function addOffer(offers, suit, level, cards) {
+  const power = suit === "NT" ? 9 : cards.reduce((sum, card) => sum + (card.rank === level ? 1 : 2), 0);
+  const red = suit === "H" || suit === "D" || suit === "NT";
+  offers.push({
+    suit,
+    level,
+    cards,
+    power,
+    red,
+    sort: { S: 0, H: 1, C: 2, D: 3, NT: 4 }[suit],
+    name: `${trumpName(suit)} ${level}`
+  });
+}
+
 function miniCard(card) {
   return `<span class="mini-card${card.red ? " red" : ""}">${escapeHtml(card.label)}</span>`;
 }
@@ -320,8 +442,8 @@ function animateTrickArrival(prev, next) {
       const ghost = document.createElement("div");
       ghost.className = "trick-ghost";
       ghost.innerHTML = playingCardHtml(card, { className: "table-card trick-card" });
-      const startX = originRect.left - stageRect.left + originRect.width / 2 - 48;
-      const startY = originRect.top - stageRect.top + originRect.height / 2 - 67;
+      const startX = originRect.left - stageRect.left + originRect.width / 2 - 39;
+      const startY = originRect.top - stageRect.top + originRect.height / 2 - 55;
       const endX = targetRect.left - stageRect.left;
       const endY = targetRect.top - stageRect.top;
       ghost.style.left = `${startX}px`;
