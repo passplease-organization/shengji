@@ -163,11 +163,25 @@ function canFollow(required, leadSuit, chosen, hand, trump) {
   return null;
 }
 
-function beats(play, best, leadSuit, trump) {
+function canBeatRequiredShape(cards, required, trump) {
+  const shape = shapeOf(cards, trump);
+  if (required.type === "single") return shape.type === "single";
+  if (required.type === "pair") return shape.type === "pair";
+  if (required.type === "tractor") return shape.type === "tractor" && shape.size === required.size && shape.pairs === required.pairs;
+  return shape.type === required.type && shape.size === required.size && shape.units.join(",") === required.units.join(",");
+}
+
+function beats(play, best, trick, trump) {
+  if (!canBeatRequiredShape(play.cards, trick.required, trump)) return false;
+  const leadSuit = trick.leadSuit;
   const pSuit = logicalSuit(play.cards[0], trump);
   const bSuit = logicalSuit(best.cards[0], trump);
-  if (pSuit !== leadSuit) return false;
-  if (bSuit !== leadSuit) return true;
+  if (pSuit !== leadSuit) {
+    if (pSuit !== "TRUMP") return false;
+    if (bSuit !== "TRUMP") return true;
+  } else if (bSuit !== leadSuit) {
+    return false;
+  }
   const pMax = Math.max(...play.cards.map((c) => cardOrder(c, trump)));
   const bMax = Math.max(...best.cards.map((c) => cardOrder(c, trump)));
   return pMax > bMax;
@@ -525,7 +539,7 @@ class Room {
     }
     this.trick.plays.push({ seat, cards });
     const currentBest = this.trick.plays.find((p) => p.seat === this.trick.bestSeat);
-    if (this.trick.plays.length === 1 || beats({ seat, cards }, currentBest, this.trick.leadSuit, this.trump)) {
+    if (this.trick.plays.length === 1 || beats({ seat, cards }, currentBest, this.trick, this.trump)) {
       this.trick.bestSeat = seat;
     }
     this.log(`${this.players[seat].name} 出 ${cards.map(cardLabel).join(" ")}`);
