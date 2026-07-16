@@ -360,7 +360,7 @@ class Room {
       const seat = this.dealIndex % 4;
       this.players[seat].hand.push(this.deck[this.dealIndex]);
       this.dealIndex += 1;
-      if (this.dealIndex % 8 === 0 || this.dealIndex === 100) emitRoom(this.code);
+      emitRoom(this.code);
       this.maybeBotDeclareDuringDeal(seat);
       this.scheduleDeal();
       return;

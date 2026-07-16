@@ -364,40 +364,150 @@ input:focus {
 
 .table-notices {
   position: absolute;
-  left: 50%;
-  top: 142px;
+  left: 18px;
+  top: 18px;
   z-index: 4;
   display: grid;
   gap: 8px;
-  transform: translateX(-50%);
+  width: min(320px, calc(100vw - 44px));
   pointer-events: none;
 }
 
 .table-notice {
-  min-height: 34px;
-  display: inline-flex;
+  position: relative;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: center;
-  gap: 9px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  background: rgba(5, 24, 13, 0.78);
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(12, 48, 27, 0.92), rgba(5, 22, 12, 0.86)),
+    radial-gradient(circle at 0% 0%, rgba(240, 191, 69, 0.18), transparent 42%);
   color: rgba(244, 248, 241, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
-  font-size: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.24);
+  overflow: hidden;
+}
+
+.notice-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f4d36a, #d9a831);
+  color: #16331f;
+  font-size: 18px;
+  font-weight: 900;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.notice-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.notice-copy strong {
+  color: #fff7d6;
+  font-size: 15px;
+  line-height: 1.1;
+}
+
+.notice-copy small {
+  color: rgba(228, 238, 228, 0.72);
+  font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .table-notice.urgent {
-  background: rgba(240, 191, 69, 0.94);
+  background:
+    linear-gradient(135deg, rgba(240, 191, 69, 0.96), rgba(212, 151, 39, 0.94)),
+    radial-gradient(circle at 0% 0%, rgba(255, 255, 255, 0.32), transparent 46%);
   color: #173123;
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.table-notice.urgent .notice-icon {
+  background: rgba(23, 49, 35, 0.92);
+  color: #ffe99a;
+}
+
+.table-notice.urgent .notice-copy strong,
+.table-notice.urgent .notice-copy small {
+  color: #173123;
+}
+
+.notice-progress {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 7px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.notice-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f0bf45, #55ca83);
 }
 
 .notice-cards {
   display: inline-flex;
   gap: 4px;
+}
+
+.deal-deck {
+  position: fixed;
+  left: 50vw;
+  top: 44vh;
+  width: 58px;
+  height: 80px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.28));
+}
+
+.deal-deck span,
+.deal-ghost {
+  position: absolute;
+  width: 44px;
+  height: 62px;
+  border-radius: 7px;
+  border: 2px solid rgba(255, 245, 226, 0.9);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 36%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.2) 0 4px, transparent 4px 8px),
+    linear-gradient(180deg, #bd2f2f, #7d1616);
+  box-shadow:
+    inset 0 0 0 3px rgba(125, 22, 22, 0.5),
+    0 8px 18px rgba(0, 0, 0, 0.22);
+}
+
+.deal-deck span:nth-child(1) {
+  transform: translate(10px, 8px) rotate(5deg);
+}
+
+.deal-deck span:nth-child(2) {
+  transform: translate(7px, 4px) rotate(1deg);
+}
+
+.deal-deck span:nth-child(3) {
+  transform: translate(4px, 0) rotate(-4deg);
+}
+
+.deal-ghost {
+  pointer-events: none;
+  z-index: 30;
 }
 
 .trick-play {
@@ -856,13 +966,35 @@ input:focus {
   }
 
   .table-notices {
-    top: 88px;
+    left: 10px;
+    top: 10px;
     width: min(320px, calc(100vw - 24px));
   }
 
   .table-notice {
-    white-space: normal;
-    text-align: center;
+    min-height: 52px;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    padding: 8px 10px;
+  }
+
+  .notice-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    font-size: 15px;
+  }
+
+  .notice-copy strong {
+    font-size: 14px;
+  }
+
+  .notice-copy small {
+    font-size: 11px;
+  }
+
+  .deal-deck {
+    top: 48vh;
+    transform: translate(-50%, -50%) scale(0.82);
   }
 
   .trick-play {

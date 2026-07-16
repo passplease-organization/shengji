@@ -88,6 +88,7 @@ socket.on("state", (next) => {
   joinPanel.classList.add("hidden");
   tablePanel.classList.remove("hidden");
   render();
+  animateDeal(prev, next);
   animateTrickArrival(prev, next);
   previousState = next;
 });
@@ -162,36 +163,60 @@ function renderTrick() {
 
 function tableNoticeHtml() {
   const parts = [];
+  const action = actionNotice();
+  if (action) {
+    const progress = state.deal?.active ? Math.round((state.deal.dealt / state.deal.total) * 100) : null;
+    parts.push(`
+      <div class="table-notice action-notice${action.urgent ? " urgent" : ""}">
+        <span class="notice-icon">${escapeHtml(action.icon)}</span>
+        <span class="notice-copy">
+          <strong>${escapeHtml(action.title)}</strong>
+          <small>${escapeHtml(action.detail)}</small>
+        </span>
+        ${progress === null ? "" : `<span class="notice-progress"><span style="width:${progress}%"></span></span>`}
+      </div>
+    `);
+  }
   if (state.currentBid) {
     parts.push(`
       <div class="table-notice bid-notice">
-        <span class="notice-main">${escapeHtml(playerName(state.currentBid.seat))} 叫主 ${escapeHtml(trumpName(state.currentBid.suit))} ${escapeHtml(state.currentBid.level)}</span>
+        <span class="notice-icon">${suitIcon(state.currentBid.suit)}</span>
+        <span class="notice-copy">
+          <strong>${escapeHtml(playerName(state.currentBid.seat))} 亮主</strong>
+          <small>${escapeHtml(trumpName(state.currentBid.suit))} ${escapeHtml(state.currentBid.level)}</small>
+        </span>
         <span class="notice-cards">${state.currentBid.cards.map(miniCard).join("")}</span>
       </div>
     `);
   }
-  const action = actionNotice();
-  if (action) parts.push(`<div class="table-notice action-notice${action.urgent ? " urgent" : ""}">${escapeHtml(action.text)}</div>`);
+  if (state.deal?.active) {
+    parts.push(`<div class="deal-deck" aria-hidden="true"><span></span><span></span><span></span></div>`);
+  }
   return parts.length ? `<div class="table-notices">${parts.join("")}</div>` : "";
 }
 
 function actionNotice() {
-  if (state.phase === "deal") return { text: "发牌中：拿到级牌可以叫主", urgent: false };
+  if (state.phase === "deal") {
+    const dealt = state.deal ? `${state.deal.dealt}/${state.deal.total}` : "";
+    return { title: "发牌中", detail: `${dealt} · 拿到级牌可以叫主`, icon: "发", urgent: false };
+  }
   if (state.phase === "bury" || state.phase === "changeBury") {
     return state.meSeat === state.dealerSeat
-      ? { text: "轮到你扣底", urgent: true }
-      : { text: `等待 ${playerName(state.dealerSeat)} 扣底`, urgent: false };
+      ? { title: "轮到你扣底", detail: "选择 8 张放入底牌", icon: "底", urgent: true }
+      : { title: "等待扣底", detail: `${playerName(state.dealerSeat)} 正在扣底`, icon: "等", urgent: false };
   }
   if (state.phase === "change") {
     return state.meSeat === state.turn
-      ? { text: "轮到你改主/攻主", urgent: true }
-      : { text: `等待 ${playerName(state.turn)} 改主/攻主`, urgent: false };
+      ? { title: "轮到你改主", detail: "可改主/攻主，或直接过", icon: "改", urgent: true }
+      : { title: "等待改主", detail: `${playerName(state.turn)} 正在选择`, icon: "等", urgent: false };
   }
   if (state.phase === "play") {
-    if (state.trick?.reviewing) return { text: `本轮结束，${playerName(state.trick.bestSeat)} 赢得本轮`, urgent: false };
+    if (state.trick?.reviewing) {
+      return { title: "本轮结束", detail: `${playerName(state.trick.bestSeat)} 赢得本轮`, icon: "赢", urgent: false };
+    }
     return state.meSeat === state.turn
-      ? { text: "轮到你出牌", urgent: true }
-      : { text: `等待 ${playerName(state.turn)} 出牌`, urgent: false };
+      ? { title: "轮到你出牌", detail: `已选 ${selected.size} 张`, icon: "出", urgent: true }
+      : { title: "等待出牌", detail: `${playerName(state.turn)} 正在出牌`, icon: "等", urgent: false };
   }
   return null;
 }
@@ -420,6 +445,60 @@ function capturePlayOrigins(ids) {
   return origins;
 }
 
+function animateDeal(prev, next) {
+  if (!next?.deal?.active) return;
+  const previousDealt = prev?.deal?.active ? prev.deal.dealt : 0;
+  const currentDealt = next.deal.dealt || 0;
+  const added = currentDealt - previousDealt;
+  if (added <= 0 || added > 12) return;
+  const board = document.querySelector(".board");
+  if (!board) return;
+  const boardRect = board.getBoundingClientRect();
+  const layer = ensureTrickLayer(board);
+  const fromX = boardRect.width / 2 - 22;
+  const fromY = boardRect.height / 2 - 31;
+  for (let n = previousDealt; n < currentDealt; n += 1) {
+    const seat = n % 4;
+    const target = dealTargetForSeat(seat, boardRect);
+    if (!target) continue;
+    const ghost = document.createElement("div");
+    ghost.className = "deal-ghost";
+    ghost.style.left = `${fromX}px`;
+    ghost.style.top = `${fromY}px`;
+    layer.appendChild(ghost);
+    const dx = target.x - fromX;
+    const dy = target.y - fromY;
+    const delay = Math.min((n - previousDealt) * 38, 220);
+    ghost.animate(
+      [
+        { transform: "translate3d(0,0,0) scale(.82) rotate(-8deg)", opacity: 0.1 },
+        { transform: `translate3d(${dx * 0.55}px, ${dy * 0.48}px, 0) scale(.96) rotate(${seat * 5 - 8}deg)`, opacity: 1, offset: 0.66 },
+        { transform: `translate3d(${dx}px, ${dy}px, 0) scale(.72) rotate(${seat * 8 - 12}deg)`, opacity: 0.05 }
+      ],
+      { duration: 460, delay, easing: "cubic-bezier(.16,.82,.22,1)", fill: "forwards" }
+    ).onfinish = () => ghost.remove();
+  }
+}
+
+function dealTargetForSeat(seat, boardRect) {
+  if (seat === state.meSeat) {
+    const handRect = $("hand")?.getBoundingClientRect();
+    if (handRect) {
+      return {
+        x: handRect.left - boardRect.left + Math.min(handRect.width - 80, 80 + state.hand.length * 18),
+        y: handRect.top - boardRect.top + 20
+      };
+    }
+  }
+  const seatNode = document.querySelector(`#seat${seat}`);
+  const rect = seatNode?.getBoundingClientRect();
+  if (!rect) return null;
+  return {
+    x: rect.left - boardRect.left + rect.width / 2 - 22,
+    y: rect.top - boardRect.top + rect.height / 2 - 31
+  };
+}
+
 function animateTrickArrival(prev, next) {
   if (!next?.trick) return;
   const addedPlays = Math.max(0, next.trick.plays.length - (prev?.trick?.plays.length || 0));
@@ -484,6 +563,10 @@ function splitLabel(card) {
 
 function trumpName(suit) {
   return { S: "黑桃", H: "红桃", C: "梅花", D: "方块", NT: "无主" }[suit] || suit;
+}
+
+function suitIcon(suit) {
+  return { S: "♠", H: "♥", C: "♣", D: "♦", NT: "王" }[suit] || "主";
 }
 
 function playerName(seat) {
