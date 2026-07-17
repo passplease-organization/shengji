@@ -17,7 +17,7 @@ const phaseName = {
   changeBury: "重扣底",
   play: "出牌中"
 };
-const REVERSE_ORDER = { D: 1, C: 2, H: 3, S: 4, BJ: 5, RJ: 6 };
+const REVERSE_ORDER = { S: 1, H: 2, C: 3, D: 4, BJ: 5, RJ: 6 };
 
 function nameValue() {
   return $("name").value.trim() || `玩家${Math.floor(Math.random() * 90 + 10)}`;
@@ -206,9 +206,10 @@ function actionNotice() {
       : { title: "等待扣底", detail: `${playerName(state.dealerSeat)} 正在扣底`, icon: "等", urgent: false };
   }
   if (state.phase === "change") {
+    const step = state.reverse?.name ? `当前询问：${state.reverse.name}` : "按顺序询问反主";
     return state.meSeat === state.turn
-      ? { title: "轮到你反主", detail: "按顺序可反则反，或直接过", icon: "反", urgent: true }
-      : { title: "等待反主", detail: `${playerName(state.turn)} 正在选择`, icon: "等", urgent: false };
+      ? { title: "轮到你反主", detail: `${step}，可反则反或过`, icon: "反", urgent: true }
+      : { title: "等待反主", detail: `${step}，${playerName(state.turn)} 正在选择`, icon: "等", urgent: false };
   }
   if (state.phase === "play") {
     if (state.trick?.reviewing) {
@@ -301,7 +302,8 @@ function renderControls() {
   } else if (state.phase === "bury" || state.phase === "changeBury") {
     $("status").textContent = state.meSeat === state.dealerSeat ? `请选择 8 张扣底，已选 ${selected.size}` : `等待 ${playerName(state.dealerSeat)} 扣底`;
   } else if (state.phase === "change") {
-    $("status").textContent = state.meSeat === state.turn ? `可按方片、梅花、红桃、黑桃、小王、大王顺序反主，或直接过` : `等待 ${playerName(state.turn)} 反主`;
+    const step = state.reverse?.name ? `当前询问 ${state.reverse.name}` : "按黑桃、红桃、梅花、方块、小王、大王顺序反主";
+    $("status").textContent = state.meSeat === state.turn ? `${step}，有对应对子/王对可反，否则过` : `${step}，等待 ${playerName(state.turn)} 选择`;
   } else if (state.phase === "play") {
     $("status").textContent = state.trick?.reviewing
       ? `本轮结束，${playerName(state.trick.bestSeat)} 赢得本轮`
@@ -392,7 +394,7 @@ function dealTrumpOffers(level) {
 
 function reverseTrumpOffers(level) {
   const offers = [];
-  for (const suit of ["D", "C", "H", "S"]) {
+  for (const suit of ["S", "H", "C", "D"]) {
     const levels = state.hand.filter((card) => card.rank === level && card.suit === suit);
     if (levels.length >= 2) addOffer(offers, suit, level, levels.slice(0, 2), REVERSE_ORDER[suit]);
   }
@@ -400,8 +402,9 @@ function reverseTrumpOffers(level) {
   const redJokers = state.hand.filter((card) => card.rank === "RJ");
   if (blackJokers.length >= 2) addOffer(offers, "NT", level, blackJokers.slice(0, 2), REVERSE_ORDER.BJ, "小王");
   if (redJokers.length >= 2) addOffer(offers, "NT", level, redJokers.slice(0, 2), REVERSE_ORDER.RJ, "大王");
+  const currentPower = state.reverse?.power;
   return offers
-    .filter((offer) => offer.power > (state.bidPower || 0))
+    .filter((offer) => offer.power === currentPower)
     .sort((a, b) => a.power - b.power)
     .slice(0, 6);
 }
