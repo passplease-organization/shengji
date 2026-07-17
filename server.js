@@ -8,6 +8,7 @@ const RED_SUITS = new Set(["H", "D"]);
 const RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
 const POINTS = { "5": 5, "10": 10, K: 10 };
 const TRUMP_NAMES = { S: "黑桃", H: "红桃", C: "梅花", D: "方块", NT: "无主" };
+const REVERSE_ORDER = { D: 1, C: 2, H: 3, S: 4, BJ: 5, RJ: 6 };
 const ROOM_TTL_MS = 1000 * 60 * 60 * 8;
 const DEAL_INTERVAL_MS = 115;
 const TRICK_REVIEW_MS = 1600;
@@ -204,6 +205,17 @@ function lowestCards(hand, trump, count) {
   return sortHand(hand, trump).slice(0, count).map((c) => c.uid);
 }
 
+function reverseRankOf(offer) {
+  if (offer.jokerRank) return REVERSE_ORDER[offer.jokerRank] || 0;
+  return REVERSE_ORDER[offer.suit] || 0;
+}
+
+function reverseName(offer) {
+  if (offer.jokerRank === "BJ") return "小王";
+  if (offer.jokerRank === "RJ") return "大王";
+  return TRUMP_NAMES[offer.suit] || offer.suit;
+}
+
 function groupedCards(cards, trump) {
   return [...countBy(cards, (c) => groupKey(c, trump)).keys()]
     .map((key) => {
@@ -342,6 +354,7 @@ class Room {
     this.trickTimer = null;
     this.trickReviewing = false;
     this.currentBid = null;
+    this.dealDeclared = false;
   }
 
   log(text) {
@@ -376,6 +389,7 @@ class Room {
         suit: this.currentBid.suit,
         level: this.currentBid.level,
         power: this.currentBid.power,
+        jokerRank: this.currentBid.jokerRank,
         cards: this.currentBid.cards.map(publicCard)
       },
       deal: {
@@ -434,6 +448,7 @@ class Room {
     this.trick = null;
     this.trickReviewing = false;
     this.currentBid = null;
+    this.dealDeclared = false;
     this.dealerTeam = teamOf(this.dealerSeat);
     this.trump = { suit: "NT", level: RANKS[this.levels[this.dealerTeam]], power: 0 };
     this.bidPower = 0;
@@ -472,9 +487,10 @@ class Room {
   finishDeal() {
     if (this.phase !== "deal") return;
     this.kitty = this.deck.slice(100);
-    if (!this.bidPower) {
+    if (!this.dealDeclared) {
       this.trump = this.autoDeclare();
       this.bidPower = this.trump.power || 0;
+      this.dealDeclared = this.bidPower > 0;
       this.currentBid = this.trump.cards?.length
         ? { seat: this.trump.seat, suit: this.trump.suit, level: this.trump.level, power: this.trump.power, cards: this.trump.cards }
         : null;
@@ -512,15 +528,14 @@ class Room {
         const levelCards = hand.filter((c) => c.rank === level && c.suit === suit);
         const levelCount = levelCards.length;
         if (levelCount) {
-          const joker = hand.find((c) => c.rank === (RED_SUITS.has(suit) ? "RJ" : "BJ"));
-          const power = levelCount + (joker ? 2 : 0);
-          if (!best || power > best.power) best = { seat, suit, level, power, cards: joker ? [...levelCards, joker] : levelCards };
+          const power = Math.min(levelCount, 2);
+          if (!best || power > best.power) best = { seat, suit, level, power, cards: levelCards.slice(0, power) };
         }
       }
     }
     if (best) {
       this.dealerSeat = best.seat;
-      return { suit: best.suit, level: best.level, power: best.power };
+      return best;
     }
     return { suit: "NT", level: RANKS[this.levels[this.dealerTeam]], power: 0 };
   }
@@ -535,23 +550,25 @@ class Room {
       this.phase = "change";
       this.turn = nextSeat(this.dealerSeat);
       this.changePasses = 0;
-      this.log(`${this.players[seat].name} 已扣底，开始改主/攻主`);
+      this.bidPower = this.bidPower >= 2 && this.trump.suit !== "NT" ? REVERSE_ORDER[this.trump.suit] : 0;
+      this.log(`${this.players[seat].name} 已扣底，开始按方片、梅花、红桃、黑桃、小王、大王反主`);
     } else {
-      this.phase = "play";
-      this.turn = this.dealerSeat;
-      this.log(`${this.players[seat].name} 重扣底，开始出牌`);
+      this.phase = "change";
+      this.turn = nextSeat(this.dealerSeat);
+      this.changePasses = 0;
+      this.log(`${this.players[seat].name} 重扣底，继续询问反主`);
     }
     this.botLoop();
   }
 
   passChange(seat) {
-    if (this.phase !== "change" || seat !== this.turn) throw new Error("还没轮到你改主");
+    if (this.phase !== "change" || seat !== this.turn) throw new Error("还没轮到你反主");
     this.changePasses = (this.changePasses || 0) + 1;
     this.log(`${this.players[seat].name} 过`);
     if (this.changePasses >= 3) {
       this.phase = "play";
       this.turn = this.dealerSeat;
-      this.log(`改主结束，${this.players[this.dealerSeat].name} 首出`);
+      this.log(`反主结束，${this.players[this.dealerSeat].name} 首出`);
     } else {
       this.turn = nextSeat(seat);
       if (this.turn === this.dealerSeat) this.turn = nextSeat(this.turn);
@@ -561,23 +578,21 @@ class Room {
 
   changeTrump(seat, ids) {
     if (this.phase === "deal") return this.declareTrump(seat, ids);
-    if (this.phase !== "change" || seat !== this.turn) throw new Error("还没轮到你改主");
+    if (this.phase !== "change" || seat !== this.turn) throw new Error("还没轮到你反主");
     const cards = ids.map((cid) => this.players[seat].hand.find((c) => c.uid === cid));
-    if (cards.length === 0 || cards.some(Boolean) === false || cards.some((c) => !c)) throw new Error("请选择手牌中的改主牌");
-    const offer = this.evaluateTrumpOffer(cards, seat);
-    if (!offer) throw new Error("只能用级牌、带同色王的级牌，或王对攻无主");
-    if (offer.power <= this.bidPower) throw new Error("改主强度必须高于当前定主");
+    if (cards.length === 0 || cards.some(Boolean) === false || cards.some((c) => !c)) throw new Error("请选择手牌中的反主牌");
+    const offer = this.evaluateReverseOffer(cards, seat);
+    if (!offer) throw new Error("反主只能用级牌对子、双小王或双大王");
+    if (reverseRankOf(offer) <= this.bidPower) throw new Error("反主顺序必须高于当前主");
     this.players[seat].hand.push(...this.buried);
     this.buried = [];
-    this.trump = { suit: offer.suit, level: offer.level, power: offer.power };
-    this.bidPower = offer.power;
-    this.dealerSeat = seat;
-    this.dealerTeam = teamOf(seat);
-    this.currentBid = { seat, suit: offer.suit, level: offer.level, power: offer.power, cards };
+    this.trump = { suit: offer.suit, level: offer.level, power: reverseRankOf(offer), jokerRank: offer.jokerRank };
+    this.bidPower = reverseRankOf(offer);
+    this.currentBid = { seat, suit: offer.suit, level: offer.level, power: this.bidPower, jokerRank: offer.jokerRank, cards };
     this.phase = "changeBury";
-    this.turn = seat;
+    this.turn = this.dealerSeat;
     this.changePasses = 0;
-    this.log(`${this.players[seat].name} 改主为 ${TRUMP_NAMES[offer.suit]} ${offer.level}，收底重扣`);
+    this.log(`${this.players[seat].name} 反主为 ${reverseName(offer)} ${offer.level}，${this.players[this.dealerSeat].name} 收底重扣`);
     this.botLoop();
   }
 
@@ -585,31 +600,40 @@ class Room {
     if (this.phase !== "deal") throw new Error("现在不能叫主");
     const cards = ids.map((cid) => this.players[seat].hand.find((c) => c.uid === cid));
     if (cards.length === 0 || cards.some((c) => !c)) throw new Error("请选择手牌中的叫主牌");
-    const offer = this.evaluateTrumpOffer(cards, seat);
-    if (!offer) throw new Error("发牌时只能用本方级牌或王对叫主");
+    const offer = this.evaluateDealOffer(cards, seat);
+    if (!offer) throw new Error("发牌时只能用本方级牌叫主，不能叫无主");
     if (offer.power <= this.bidPower) throw new Error("叫主强度必须高于当前主");
     this.trump = { suit: offer.suit, level: offer.level, power: offer.power };
     this.bidPower = offer.power;
-    this.dealerSeat = seat;
-    this.dealerTeam = teamOf(seat);
+    if (!this.dealDeclared) {
+      this.dealerSeat = seat;
+      this.dealerTeam = teamOf(seat);
+      this.dealDeclared = true;
+    }
     this.turn = seat;
     this.currentBid = { seat, suit: offer.suit, level: offer.level, power: offer.power, cards };
     this.log(`${this.players[seat].name} 叫主：${TRUMP_NAMES[offer.suit]} ${offer.level}`);
     emitRoom(this.code);
   }
 
-  evaluateTrumpOffer(cards, seat) {
+  evaluateDealOffer(cards, seat) {
     const level = RANKS[this.levels[teamOf(seat)]];
-    const jokerRanks = cards.map((c) => c.rank).sort().join(",");
-    if (cards.length === 2 && jokerRanks === "BJ,RJ") return { suit: "NT", level, power: 9 };
-    const levels = cards.filter((c) => c.rank === level && SUITS.includes(c.suit));
-    if (!levels.length) return null;
-    const suit = levels[0].suit;
-    if (!levels.every((c) => c.suit === suit)) return null;
-    const jokers = cards.filter((c) => c.rank === (RED_SUITS.has(suit) ? "RJ" : "BJ"));
-    if (cards.length !== levels.length + jokers.length) return null;
-    const power = levels.length + jokers.length * 2;
-    return { suit, level, power };
+    if (cards.length < 1 || cards.length > 2) return null;
+    if (!cards.every((c) => c.rank === level && SUITS.includes(c.suit))) return null;
+    const suit = cards[0].suit;
+    if (!cards.every((c) => c.suit === suit)) return null;
+    return { suit, level, power: cards.length };
+  }
+
+  evaluateReverseOffer(cards, seat) {
+    const level = RANKS[this.levels[teamOf(seat)]];
+    if (cards.length !== 2) return null;
+    if (cards.every((c) => c.rank === "BJ")) return { suit: "NT", level, power: REVERSE_ORDER.BJ, jokerRank: "BJ" };
+    if (cards.every((c) => c.rank === "RJ")) return { suit: "NT", level, power: REVERSE_ORDER.RJ, jokerRank: "RJ" };
+    if (!cards.every((c) => c.rank === level && SUITS.includes(c.suit))) return null;
+    const suit = cards[0].suit;
+    if (!cards.every((c) => c.suit === suit)) return null;
+    return { suit, level, power: REVERSE_ORDER[suit] };
   }
 
   play(seat, ids) {

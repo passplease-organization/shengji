@@ -13,10 +13,11 @@ const phaseName = {
   lobby: "等待开局",
   deal: "发牌中",
   bury: "扣底",
-  change: "改主",
+  change: "反主",
   changeBury: "重扣底",
   play: "出牌中"
 };
+const REVERSE_ORDER = { D: 1, C: 2, H: 3, S: 4, BJ: 5, RJ: 6 };
 
 function nameValue() {
   return $("name").value.trim() || `玩家${Math.floor(Math.random() * 90 + 10)}`;
@@ -182,8 +183,8 @@ function tableNoticeHtml() {
       <div class="table-notice bid-notice">
         <span class="notice-icon">${suitIcon(state.currentBid.suit)}</span>
         <span class="notice-copy">
-          <strong>${escapeHtml(playerName(state.currentBid.seat))} 亮主</strong>
-          <small>${escapeHtml(trumpName(state.currentBid.suit))} ${escapeHtml(state.currentBid.level)}</small>
+          <strong>${escapeHtml(playerName(state.currentBid.seat))} ${state.phase === "deal" ? "叫主" : "亮主"}</strong>
+          <small>${escapeHtml(bidTrumpName(state.currentBid))} ${escapeHtml(state.currentBid.level)}</small>
         </span>
         <span class="notice-cards">${state.currentBid.cards.map(miniCard).join("")}</span>
       </div>
@@ -206,8 +207,8 @@ function actionNotice() {
   }
   if (state.phase === "change") {
     return state.meSeat === state.turn
-      ? { title: "轮到你改主", detail: "可改主/攻主，或直接过", icon: "改", urgent: true }
-      : { title: "等待改主", detail: `${playerName(state.turn)} 正在选择`, icon: "等", urgent: false };
+      ? { title: "轮到你反主", detail: "按顺序可反则反，或直接过", icon: "反", urgent: true }
+      : { title: "等待反主", detail: `${playerName(state.turn)} 正在选择`, icon: "等", urgent: false };
   }
   if (state.phase === "play") {
     if (state.trick?.reviewing) {
@@ -250,7 +251,7 @@ function renderBidShortcuts() {
   }
   el.classList.remove("hidden");
   el.innerHTML = `
-    <span class="shortcut-label">${state.phase === "deal" ? "可叫主" : "可改主"}</span>
+    <span class="shortcut-label">${state.phase === "deal" ? "可叫主" : "可反主"}</span>
     ${offers
       .map(
         (offer, index) => `
@@ -280,7 +281,7 @@ function renderControls() {
   const myTurn = state.meSeat === state.turn;
   $("botBtn").disabled = state.phase !== "lobby";
   $("startBtn").disabled = state.phase !== "lobby";
-  $("changeBtn").textContent = state.phase === "deal" ? "叫主" : "改主/攻主";
+  $("changeBtn").textContent = state.phase === "deal" ? "叫主" : "反主";
   $("passBtn").disabled = !(state.phase === "change" && state.meSeat === state.turn);
   $("changeBtn").disabled = !(
     (state.phase === "deal" && selected.size > 0) ||
@@ -290,11 +291,11 @@ function renderControls() {
   $("playBtn").disabled = !(state.phase === "play" && myTurn && selected.size > 0 && !state.trick?.reviewing);
   if (state.phase === "deal") {
     const dealt = state.deal ? `${state.deal.dealt}/${state.deal.total}` : "";
-    $("status").textContent = `正在发牌 ${dealt}，拿到本方级牌时可选择后叫主`;
+    $("status").textContent = `正在发牌 ${dealt}，只能用本方级牌叫主定庄`;
   } else if (state.phase === "bury" || state.phase === "changeBury") {
     $("status").textContent = state.meSeat === state.dealerSeat ? `请选择 8 张扣底，已选 ${selected.size}` : `等待 ${playerName(state.dealerSeat)} 扣底`;
   } else if (state.phase === "change") {
-    $("status").textContent = state.meSeat === state.turn ? `可选择级牌或王对改主/攻主，或直接过` : `等待 ${playerName(state.turn)} 改主/攻主`;
+    $("status").textContent = state.meSeat === state.turn ? `可按方片、梅花、红桃、黑桃、小王、大王顺序反主，或直接过` : `等待 ${playerName(state.turn)} 反主`;
   } else if (state.phase === "play") {
     $("status").textContent = state.trick?.reviewing
       ? `本轮结束，${playerName(state.trick.bestSeat)} 赢得本轮`
@@ -363,26 +364,15 @@ function possibleTrumpOffers() {
   const me = state.players[state.meSeat];
   if (!me) return [];
   const level = state.levels[me.team];
-  const bySuit = new Map();
-  for (const suit of ["S", "H", "C", "D"]) {
-    bySuit.set(
-      suit,
-      state.hand.filter((card) => card.rank === level && card.suit === suit)
-    );
-  }
-  const redJokers = state.hand.filter((card) => card.rank === "RJ");
-  const blackJokers = state.hand.filter((card) => card.rank === "BJ");
+  return state.phase === "deal" ? dealTrumpOffers(level) : reverseTrumpOffers(level);
+}
+
+function dealTrumpOffers(level) {
   const offers = [];
   for (const suit of ["S", "H", "C", "D"]) {
-    const levels = bySuit.get(suit);
+    const levels = state.hand.filter((card) => card.rank === level && card.suit === suit);
     if (!levels.length) continue;
-    const matchingJokers = (suit === "H" || suit === "D") ? redJokers : blackJokers;
-    const baseCards = levels.slice(0, Math.min(2, levels.length));
-    addOffer(offers, suit, level, baseCards);
-    if (matchingJokers.length) addOffer(offers, suit, level, [...baseCards, matchingJokers[0]]);
-  }
-  if (redJokers.length && blackJokers.length) {
-    addOffer(offers, "NT", level, [blackJokers[0], redJokers[0]]);
+    addOffer(offers, suit, level, levels.slice(0, Math.min(2, levels.length)), levels.length >= 2 ? 2 : 1);
   }
   return offers
     .filter((offer) => offer.power > (state.bidPower || 0))
@@ -390,8 +380,23 @@ function possibleTrumpOffers() {
     .slice(0, 6);
 }
 
-function addOffer(offers, suit, level, cards) {
-  const power = suit === "NT" ? 9 : cards.reduce((sum, card) => sum + (card.rank === level ? 1 : 2), 0);
+function reverseTrumpOffers(level) {
+  const offers = [];
+  for (const suit of ["D", "C", "H", "S"]) {
+    const levels = state.hand.filter((card) => card.rank === level && card.suit === suit);
+    if (levels.length >= 2) addOffer(offers, suit, level, levels.slice(0, 2), REVERSE_ORDER[suit]);
+  }
+  const blackJokers = state.hand.filter((card) => card.rank === "BJ");
+  const redJokers = state.hand.filter((card) => card.rank === "RJ");
+  if (blackJokers.length >= 2) addOffer(offers, "NT", level, blackJokers.slice(0, 2), REVERSE_ORDER.BJ, "小王");
+  if (redJokers.length >= 2) addOffer(offers, "NT", level, redJokers.slice(0, 2), REVERSE_ORDER.RJ, "大王");
+  return offers
+    .filter((offer) => offer.power > (state.bidPower || 0))
+    .sort((a, b) => a.power - b.power)
+    .slice(0, 6);
+}
+
+function addOffer(offers, suit, level, cards, power, label = null) {
   const red = suit === "H" || suit === "D" || suit === "NT";
   offers.push({
     suit,
@@ -400,7 +405,7 @@ function addOffer(offers, suit, level, cards) {
     power,
     red,
     sort: { S: 0, H: 1, C: 2, D: 3, NT: 4 }[suit],
-    name: `${trumpName(suit)} ${level}`
+    name: `${label || trumpName(suit)} ${level}`
   });
 }
 
@@ -562,6 +567,12 @@ function splitLabel(card) {
 
 function trumpName(suit) {
   return { S: "黑桃", H: "红桃", C: "梅花", D: "方块", NT: "无主" }[suit] || suit;
+}
+
+function bidTrumpName(bid) {
+  if (bid?.jokerRank === "BJ") return "小王";
+  if (bid?.jokerRank === "RJ") return "大王";
+  return trumpName(bid?.suit);
 }
 
 function suitIcon(suit) {
