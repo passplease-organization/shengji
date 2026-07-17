@@ -595,6 +595,7 @@ class Room {
     this.phase = "change";
     this.turn = nextSeat(this.dealerSeat);
     this.log(`现在询问 ${this.reverseStep.name} 反主`);
+    this.skipUnavailableReverseTurns();
   }
 
   advanceReverseTurn(seat) {
@@ -605,6 +606,26 @@ class Room {
     }
     this.turn = nextSeat(seat);
     if (this.turn === this.dealerSeat) this.turn = nextSeat(this.turn);
+    this.skipUnavailableReverseTurns();
+  }
+
+  skipUnavailableReverseTurns() {
+    while (this.phase === "change" && this.reverseStep && !this.canSeatReverseStep(this.turn, this.reverseStep)) {
+      this.changePasses = (this.changePasses || 0) + 1;
+      if (this.changePasses >= 3) {
+        this.beginReverseFrom(this.reverseStep.power);
+        return;
+      }
+      this.turn = nextSeat(this.turn);
+      if (this.turn === this.dealerSeat) this.turn = nextSeat(this.turn);
+    }
+  }
+
+  canSeatReverseStep(seat, step) {
+    const hand = this.players[seat]?.hand || [];
+    const level = RANKS[this.levels[teamOf(seat)]];
+    if (step.jokerRank) return hand.filter((card) => card.rank === step.jokerRank).length >= 2;
+    return hand.filter((card) => card.rank === level && card.suit === step.suit).length >= 2;
   }
 
   passChange(seat) {

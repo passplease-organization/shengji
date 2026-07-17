@@ -334,6 +334,15 @@ function compareViewCard(a, b, trump) {
   const trumpA = isTrumpCard(a, trump) ? 1 : 0;
   const trumpB = isTrumpCard(b, trump) ? 1 : 0;
   if (trumpA !== trumpB) return trumpB - trumpA;
+  if (trumpA && trumpB) {
+    const orderA = viewTrumpOrder(a, trump);
+    const orderB = viewTrumpOrder(b, trump);
+    if (orderA !== orderB) return orderB - orderA;
+    const trumpSuitA = displaySuitRank(a);
+    const trumpSuitB = displaySuitRank(b);
+    if (trumpSuitA !== trumpSuitB) return trumpSuitB - trumpSuitA;
+    return cardOrder(b, trump) - cardOrder(a, trump);
+  }
   const suitA = suitRank(a, trump);
   const suitB = suitRank(b, trump);
   if (suitA !== suitB) return suitB - suitA;
@@ -341,7 +350,10 @@ function compareViewCard(a, b, trump) {
 }
 
 function handGroup(card, trump) {
-  return isTrumpCard(card, trump) ? "TRUMP" : card.suit;
+  if (!isTrumpCard(card, trump)) return card.suit;
+  if (card.suit === "JOKER") return `J${card.rank}`;
+  if (card.rank === trump.level) return `L${card.suit}`;
+  return `T${card.suit}`;
 }
 
 function seatPosition(seat) {
@@ -350,6 +362,10 @@ function seatPosition(seat) {
 
 function suitRank(card, trump) {
   if (isTrumpCard(card, trump)) return 4;
+  return displaySuitRank(card);
+}
+
+function displaySuitRank(card) {
   return { S: 3, H: 2, C: 1, D: 0 }[card.suit] ?? 0;
 }
 
@@ -368,6 +384,14 @@ function cardOrder(card, trump) {
   const ranks = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
   const idx = ranks.indexOf(card.rank);
   return idx >= 0 ? idx : -1;
+}
+
+function viewTrumpOrder(card, trump) {
+  if (card.rank === "RJ") return 1000;
+  if (card.rank === "BJ") return 990;
+  if (card.rank === trump.level && trump.suit !== "NT" && card.suit === trump.suit) return 980;
+  if (card.rank === trump.level) return 970;
+  return cardOrder(card, trump);
 }
 
 function possibleTrumpOffers() {
