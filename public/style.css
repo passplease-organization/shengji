@@ -740,6 +740,10 @@ input:focus {
   position: relative;
 }
 
+.hand > .suit-break {
+  margin-left: -18px;
+}
+
 .hand > *:first-child {
   margin-left: 0;
 }
@@ -1076,5 +1080,9 @@ input:focus {
 
   .hand > * {
     margin-left: -30px;
+  }
+
+  .hand > .suit-break {
+    margin-left: -12px;
   }
 }

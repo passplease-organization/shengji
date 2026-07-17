@@ -228,7 +228,13 @@ function renderHand() {
     if (!valid.has(uid)) selected.delete(uid);
   }
   const cards = [...state.hand].sort((a, b) => compareViewCard(a, b, state.trump));
-  hand.innerHTML = cards.map(cardHtml).join("");
+  hand.innerHTML = cards
+    .map((card, index) => {
+      const prev = cards[index - 1];
+      const groupStart = index > 0 && handGroup(card, state.trump) !== handGroup(prev, state.trump);
+      return cardHtml(card, groupStart ? " suit-break" : "");
+    })
+    .join("");
   hand.querySelectorAll("[data-uid]").forEach((card, index) => {
     card.style.zIndex = String(index + 1);
     card.style.setProperty("--stack-index", String(index));
@@ -315,9 +321,9 @@ function renderLog() {
     .join("");
 }
 
-function cardHtml(card) {
+function cardHtml(card, extraClass = "") {
   return playingCardHtml(card, {
-    className: `table-card hand-card${selected.has(card.uid) ? " selected" : ""}`,
+    className: `table-card hand-card${extraClass}${selected.has(card.uid) ? " selected" : ""}`,
     attrs: `data-uid="${card.uid}"`
   });
 }
@@ -330,6 +336,10 @@ function compareViewCard(a, b, trump) {
   const suitB = suitRank(b, trump);
   if (suitA !== suitB) return suitB - suitA;
   return cardOrder(b, trump) - cardOrder(a, trump);
+}
+
+function handGroup(card, trump) {
+  return isTrumpCard(card, trump) ? "TRUMP" : card.suit;
 }
 
 function seatPosition(seat) {
