@@ -147,6 +147,19 @@ function shapeOf(cards, trump) {
   return { type: "throw", size: cards.length, units: groups.map(([, n]) => n).sort((a, b) => b - a) };
 }
 
+function hasTractor(cards, trump, pairCount) {
+  const ordered = [...countBy(cards, (c) => groupKey(c, trump)).entries()]
+    .filter(([, n]) => n >= 2)
+    .map(([key]) => cards.find((c) => groupKey(c, trump) === key))
+    .map((c) => cardOrder(c, trump))
+    .sort((a, b) => a - b);
+  for (let i = 0; i <= ordered.length - pairCount; i += 1) {
+    const run = ordered.slice(i, i + pairCount);
+    if (run.every((v, idx) => idx === 0 || v === run[idx - 1] + 1)) return true;
+  }
+  return false;
+}
+
 function canFollow(required, leadSuit, chosen, hand, trump) {
   if (chosen.length !== required.size) return "张数不对";
   const chosenLead = chosen.filter((c) => logicalSuit(c, trump) === leadSuit);
@@ -159,7 +172,7 @@ function canFollow(required, leadSuit, chosen, hand, trump) {
   const chosenPairs = [...countBy(chosen, (c) => groupKey(c, trump)).values()].filter((n) => n >= 2).length;
   const handPairs = [...countBy(handLead, (c) => groupKey(c, trump)).values()].filter((n) => n >= 2).length;
   if (required.type === "pair" && handPairs > 0 && chosenShape.type !== "pair") return "有对子时必须跟对子";
-  if (required.type === "tractor" && handPairs >= required.pairs && chosenShape.type !== "tractor") return "有足够对子时必须跟拖拉机";
+  if (required.type === "tractor" && hasTractor(handLead, trump, required.pairs) && chosenShape.type !== "tractor") return "有拖拉机时必须跟拖拉机";
   return null;
 }
 
@@ -191,19 +204,107 @@ function lowestCards(hand, trump, count) {
   return sortHand(hand, trump).slice(0, count).map((c) => c.uid);
 }
 
+function groupedCards(cards, trump) {
+  return [...countBy(cards, (c) => groupKey(c, trump)).keys()]
+    .map((key) => {
+      const group = cards.filter((c) => groupKey(c, trump) === key);
+      return { key, cards: sortHand(group, trump), order: cardOrder(group[0], trump) };
+    })
+    .sort((a, b) => a.order - b.order);
+}
+
+function lowestPair(cards, trump) {
+  const group = groupedCards(cards, trump).find((g) => g.cards.length >= 2);
+  return group ? group.cards.slice(0, 2) : null;
+}
+
+function lowestTractor(cards, trump, pairCount) {
+  const pairs = groupedCards(cards, trump).filter((g) => g.cards.length >= 2);
+  for (let i = 0; i <= pairs.length - pairCount; i += 1) {
+    const run = pairs.slice(i, i + pairCount);
+    const consecutive = run.every((g, idx) => idx === 0 || g.order === run[idx - 1].order + 1);
+    if (consecutive) return run.flatMap((g) => g.cards.slice(0, 2));
+  }
+  return null;
+}
+
+function pairedCardsFirst(cards, trump, count) {
+  const picked = [];
+  const used = new Set();
+  for (const group of groupedCards(cards, trump)) {
+    if (group.cards.length < 2 || picked.length + 2 > count) continue;
+    const pair = group.cards.slice(0, 2);
+    pair.forEach((card) => {
+      used.add(card.uid);
+      picked.push(card);
+    });
+  }
+  for (const card of sortHand(cards, trump)) {
+    if (picked.length >= count) break;
+    if (!used.has(card.uid)) picked.push(card);
+  }
+  return picked.slice(0, count);
+}
+
+function lowestLeadCombination(hand, trump) {
+  const bySuit = new Map();
+  for (const card of hand) {
+    const suit = logicalSuit(card, trump);
+    if (!bySuit.has(suit)) bySuit.set(suit, []);
+    bySuit.get(suit).push(card);
+  }
+  const candidates = [];
+  for (const cards of bySuit.values()) {
+    for (let pairs = 3; pairs >= 2; pairs -= 1) {
+      const tractor = lowestTractor(cards, trump, pairs);
+      if (tractor) candidates.push(tractor);
+    }
+    const pair = lowestPair(cards, trump);
+    if (pair) candidates.push(pair);
+  }
+  candidates.sort((a, b) => cardOrder(a[0], trump) - cardOrder(b[0], trump) || b.length - a.length);
+  return candidates[0] || null;
+}
+
 function chooseBotPlay(room, seat) {
   const player = room.players[seat];
   const hand = player.hand;
   if (!room.trick) {
+    const combo = lowestLeadCombination(hand, room.trump);
+    if (combo) return combo.map((c) => c.uid);
     const nonPoint = sortHand(hand, room.trump).find((c) => !c.point);
     return [nonPoint || sortHand(hand, room.trump)[0]].map((c) => c.uid);
   }
   const req = room.trick.required;
   const leadSuit = room.trick.leadSuit;
   const handLead = hand.filter((c) => logicalSuit(c, room.trump) === leadSuit);
-  if (handLead.length >= req.size) return sortHand(handLead, room.trump).slice(0, req.size).map((c) => c.uid);
+  if (handLead.length >= req.size) {
+    if (req.type === "tractor") {
+      const tractor = lowestTractor(handLead, room.trump, req.pairs);
+      if (tractor) return tractor.map((c) => c.uid);
+      return pairedCardsFirst(handLead, room.trump, req.size).map((c) => c.uid);
+    }
+    if (req.type === "pair") {
+      const pair = lowestPair(handLead, room.trump);
+      if (pair) return pair.map((c) => c.uid);
+    }
+    return sortHand(handLead, room.trump).slice(0, req.size).map((c) => c.uid);
+  }
+  if (handLead.length) {
+    const needed = req.size - handLead.length;
+    const offSuit = sortHand(hand.filter((c) => logicalSuit(c, room.trump) !== leadSuit), room.trump).slice(0, needed);
+    return [...sortHand(handLead, room.trump), ...offSuit].map((c) => c.uid);
+  }
+  if (req.type === "tractor") {
+    const trumpCards = hand.filter((c) => logicalSuit(c, room.trump) === "TRUMP");
+    const tractor = lowestTractor(trumpCards, room.trump, req.pairs);
+    if (tractor) return tractor.map((c) => c.uid);
+  }
+  if (req.type === "pair") {
+    const pair = lowestPair(hand, room.trump);
+    if (pair) return pair.map((c) => c.uid);
+  }
   return [
-    ...handLead,
     ...sortHand(hand.filter((c) => logicalSuit(c, room.trump) !== leadSuit), room.trump).slice(0, req.size - handLead.length)
   ].map((c) => c.uid);
 }

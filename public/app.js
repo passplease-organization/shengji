@@ -189,10 +189,9 @@ function tableNoticeHtml() {
       </div>
     `);
   }
-  if (state.deal?.active) {
-    parts.push(`<div class="deal-deck" aria-hidden="true"><span></span><span></span><span></span></div>`);
-  }
-  return parts.length ? `<div class="table-notices">${parts.join("")}</div>` : "";
+  const notices = parts.length ? `<div class="table-notices">${parts.join("")}</div>` : "";
+  const deck = state.deal?.active ? `<div class="deal-deck" aria-hidden="true"><span></span><span></span><span></span></div>` : "";
+  return `${notices}${deck}`;
 }
 
 function actionNotice() {
